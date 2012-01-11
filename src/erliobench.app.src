@@ -1,0 +1,6 @@
+{application, erliobench, [
+    {description, "Benchmarks for Erlang IO"},
+    {vsn, git},
+    {registered, []},
+    {applications, [kernel]}
+]}.
