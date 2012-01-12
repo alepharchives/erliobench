@@ -1,7 +1,7 @@
 -module(erliobench).
 -export([main/1]).
 
--define(FILE_MOD, file).
+-define(FILE_MOD, erlfd).
 
 main([NumWorkers, Path]) ->
     io:format("Starting the test.~n", []),
