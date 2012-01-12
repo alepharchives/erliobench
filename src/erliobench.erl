@@ -1,6 +1,8 @@
 -module(erliobench).
 -export([main/1]).
 
+-define(FILE_MOD, file).
+
 main([NumWorkers, Path]) ->
     io:format("Starting the test.~n", []),
     run(list_to_integer(NumWorkers), Path);
@@ -11,7 +13,8 @@ main(_) ->
 
 run(N, Path) ->
     spawn_workers(N, Path),
-    collect_data(0.0, 0.0).
+    put(start_time, erlang:now()),
+    collect_data(0).
 
 
 spawn_workers(0, _) ->
@@ -22,37 +25,40 @@ spawn_workers(N, Path) ->
     spawn_workers(N-1, Path).
 
 
-collect_data(Count, Total) ->
-    case round(Count) rem 10000 of
-        0 when Count > 0, Total > 0 ->
-            log("Rate: ~f/~f = ~f~n", [Count, Total, Count / Total]);
+collect_data(Total) ->
+    case Total rem 10000 of
+        0 when Total > 0 ->
+            TimeDiff = timer:now_diff(now(), get(start_time)),
+            Rate = float(Total) / (float(TimeDiff) / 100000.0),
+            log("Rate: ~f~n", [Rate]);
         _ ->
             ok
     end,
-    receive {rec, Time} ->
-        collect_data(Count + 1000.0, Total + Time)
+    receive {ops, Count} ->
+        case get(start_time) of
+            undefined -> put(start_time, now());
+            _ -> ok
+        end,
+        collect_data(Total + Count)
     end.
 
 
 worker(Parent, N, Path) ->
     log("Booting worker: ~p~n", [N]),
-    {ok, Fd} = file:open(Path, [read, write, raw, binary]),
-    put(start_time, erlang:now()),
+    {ok, Fd} = ?FILE_MOD:open(Path, [read, write, raw, binary]),
     put(bin_data, mk_bin(1024)),
     worker_loop(Parent, Fd, 0).
 
 
 worker_loop(Parent, Fd, Count) when Count >= 1000 ->
-    Diff = timer:now_diff(now(), get(start_time)),
-    Parent ! {rec, float(Diff) / 100000.0},
-    put(start_time, now()),
+    Parent ! {ops, Count*3},
     worker_loop(Parent, Fd, 0);
 worker_loop(Parent, Fd, Count) ->
     case random:uniform() >= 0.5 of
         true ->
-            {ok, <<_:1024/binary>>} = file:pread(Fd, 0, 1024);
+            {ok, _} = ?FILE_MOD:pread(Fd, 0, 1024);
         false ->
-            ok = file:pwrite(Fd, 0, get(bin_data))
+            ok = ?FILE_MOD:pwrite(Fd, 0, get(bin_data))
     end,
     worker_loop(Parent, Fd, Count+1).
 
